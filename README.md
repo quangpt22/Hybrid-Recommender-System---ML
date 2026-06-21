@@ -115,6 +115,23 @@ Add `--force` to re-split the data and recompute everything from scratch:
 python main.py --mode train --split 8020 --force
 ```
 
+> **Note:** training is slow and can take a long time to finish. There are two
+> reasons:
+>
+> 1. **Building the full prediction matrices.** For each base model we fill an
+>    entire `n_users × n_items` matrix (≈ 6,000 × 3,700 ≈ 22 million cells), in
+>    pure-Python loops: for every user, and for every unrated item, we gather the
+>    top-K neighbors and compute a weighted average. The user-based pass is the
+>    worst — for each unrated item it scans the whole rating column to find who
+>    rated it, so the cost scales with users × items × neighbors.
+> 2. **The weight grid-search.** Tuning then sweeps every (α, β) combination
+>    (~200+ of them) and re-ranks the full candidate list for every validation
+>    user — twice (cold users and warm users separately).
+>
+> The good news: this only runs once per split. The matrices and similarity
+> checkpoints are cached afterwards, so `predict` (and later runs without
+> `--force`) is fast.
+
 ### 4. Predict (evaluate on the test set + show a sample recommendation)
 
 ```bash
@@ -222,15 +239,31 @@ Recall@K, NDCG@K and MRR@K. RMSE is measured on the observed test ratings.
 ## Why prediction matrices?
 
 During tuning, the grid search scores every candidate item for many users, many
-times (once per weight combination). Calling each base model's per-user predict
-function repeatedly would be far too slow. Instead we precompute the full
-`n_users × n_items` prediction matrix for each base model **once**, then tuning
-and evaluation are just fast matrix arithmetic.
+times (once per weight combination). If we did this by calling each base model's
+per-user predict function on the fly, the cost would explode:
+
+- **The expensive work would be repeated for every (α, β) combination.** The
+  per-user predictor recomputes a prediction from scratch each call — gathering
+  the user's rated items (or an item's raters), slicing the similarity matrix,
+  selecting the top-K neighbors, and computing the weighted average. None of
+  that depends on α or β, yet it would be redone on every one of the ~200+ grid
+  steps, for every user, for every candidate item. That is the same heavy
+  computation run hundreds of times over.
+- **It runs in Python per (user, item), with no vectorization.** Each call does
+  its own argsort and dot product on small arrays, so the per-call overhead is
+  paid millions of times. The user-based predictor is especially costly because
+  it scans a rating column to find an item's raters on every single call.
+
+Instead we precompute the full `n_users × n_items` prediction matrix for each
+base model **once** (this is the slow part of training). After that, tuning and
+evaluation are just fast NumPy array indexing and a weighted sum — the heavy CF
+work is never repeated, no matter how many weight combinations are tried.
 
 The matrices are numerically identical to calling the per-user predictors — this
 was verified to machine precision. Inference (step 6 of the pipeline) uses the
 real `HybridRecommender3Way` object to demonstrate the proper "call the model"
-pathway.
+pathway, since at inference time we only score one user, so the per-user path is
+cheap and there is no repetition to amortize.
 
 ---
 
