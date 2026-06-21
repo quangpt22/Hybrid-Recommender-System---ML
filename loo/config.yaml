@@ -1,0 +1,17 @@
+data:
+  path: ./data
+  split: loo
+evaluation:
+  top_k: 10
+hybrid:
+  alpha_cold: 0.15
+  alpha_warm: 0.15
+  beta_cold: 0.5
+  beta_warm: 0.4
+model:
+  cold_start_threshold: 30
+  n_neighbors: 30
+paths:
+  checkpoints: ./loo/checkpoints
+  inputs: ./loo/inputs
+  weights: ./loo/weights

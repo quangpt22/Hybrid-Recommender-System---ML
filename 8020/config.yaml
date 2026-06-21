@@ -1,0 +1,18 @@
+data:
+  path: ./data
+  split: '8020'
+evaluation:
+  test_size: 0.2
+  top_k: 20
+hybrid:
+  alpha_cold: 0.2
+  alpha_warm: 0.15
+  beta_cold: 0.2
+  beta_warm: 0.3
+model:
+  cold_start_threshold: 30
+  n_neighbors: 30
+paths:
+  checkpoints: ./8020/checkpoints
+  inputs: ./8020/inputs
+  weights: ./8020/weights
