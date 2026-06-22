@@ -57,6 +57,8 @@ def main():
     threshold = cfg['model']['cold_start_threshold']
     n_neighbors = cfg['model']['n_neighbors']
     top_k = cfg['evaluation']['top_k']
+    test_size = cfg['evaluation'].get('test_size', 0.2) # LOO don't have test_size so default to 0.2 to avoid error
+    val_size = cfg['evaluation'].get('val_size', 0.1)
 
     print("\n3-Way Hybrid Recommender")
     print("Mode: {} | Split: {}".format(args.mode.upper(), args.split.upper()))
@@ -86,7 +88,7 @@ def main():
             rate_train, rate_val, rate_test = loader.split_loo(ratings)
         else:
             rate_train, rate_val, rate_test = loader.split_8020_per_user(
-                ratings, test_size=0.1, val_size=0.1, seed=None)
+                ratings, test_size=test_size, val_size=val_size, seed=None)
 
         # save this split so predict mode uses the exact same one
         os.makedirs(inputs_dir, exist_ok=True)

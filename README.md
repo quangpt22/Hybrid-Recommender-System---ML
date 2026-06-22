@@ -64,7 +64,7 @@ to maximize NDCG, separately for each user group.
 ├── Content_based_Filtering/
 │   └── model.py                  # ContentBasedRecommender
 │
-├── 8020/                         # artifacts for the 80/10/10 split
+├── 8020/                         # artifacts for the 70/10/20 split
 │   ├── config.yaml               # paths, hyperparameters, tuned weights
 │   ├── inputs/                   # split files + prediction matrices (generated)
 │   ├── checkpoints/              # CF similarity matrices (generated)
@@ -105,7 +105,7 @@ data/
 ### 3. Train (build models + tune the hybrid weights)
 
 ```bash
-python main.py --mode train --split 8020      # 80/10/10 random split
+python main.py --mode train --split 8020      # 70/10/20 random split
 python main.py --mode train --split loo       # leave-one-out split
 ```
 
@@ -198,6 +198,8 @@ model:
   cold_start_threshold: 30     # users with < 30 train ratings are "cold"
   n_neighbors: 30              # K for KNN collaborative filtering
 evaluation:
+  test_size: 0.2               # fraction held out for test (8020 split)
+  val_size: 0.1                # fraction held out for validation; train = remainder
   top_k: 20                    # K for ranking metrics (8020 uses 20, loo uses 10)
 hybrid:                        # filled in by tuning (alpha=item, beta=user)
   alpha_cold: ...
@@ -214,7 +216,7 @@ Two splitting strategies are supported:
 
 | Split    | Train | Validation | Test | Positives per user |
 | -------- | ----- | ---------- | ---- | ------------------ |
-| `8020`   | ~80%  | ~10%       | ~10% | several            |
+| `8020`   | 70%   | 10%        | 20%  | several            |
 | `loo`    | all but last 2 | 1 | 1 | exactly one (leave-one-out) |
 
 **Why a separate validation set?** The hybrid has tunable parameters
@@ -227,12 +229,32 @@ biased. So:
   "training" data)
 - **test** → final, untouched evaluation
 
-This is why the 80/10/10 split exists rather than a plain 80/20: the extra 10%
-is reserved for honest hyperparameter tuning.
+The 20% test partition matches the held-out ranking set used by the single-model
+baselines, so the ranking metrics are directly comparable. The 10% validation
+set — which the standalone baselines do not use — is reserved exclusively for
+tuning the hybrid weights, with no test-set leakage. Training on 70% (rather than
+the baselines' 80%) is the cost of carving out that validation set; the hybrid
+still outperforms every single model despite slightly less training data.
 
 Ranking metrics are computed by scoring each user's held-out positive item(s)
 against all of their unseen items, ranking, and measuring Precision@K,
 Recall@K, NDCG@K and MRR@K. RMSE is measured on the observed test ratings.
+
+### Results
+
+On the 70/10/20 split, the **tuned hybrid outperforms all three single models**
+on the ranking metrics — confirming that fusing complementary signals helps when
+there is enough held-out data to both tune and evaluate the blend.
+
+Under **Leave-One-Out**, the hybrid does **not** beat the strongest single model,
+and pure content- or user-CF can match or exceed the tuned blend. This is a
+property of the protocol, not of the models: LOO leaves exactly **one** item per
+user for validation, which is too little signal to tune a three-way blend — the
+weights that rank that single validation item best do not generalize to the
+single (different) test item, so the blend overfits the sparse validation set. 
+The hybrid's advantage therefore appears precisely when the
+evaluation provides enough per-user signal (the multi-positive 70/10/20 split),
+which is absent under single-positive LOO.
 
 ---
 

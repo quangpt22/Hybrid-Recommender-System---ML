@@ -3,6 +3,7 @@ data:
   split: '8020'
 evaluation:
   test_size: 0.2
+  val_size: 0.1
   top_k: 20
 hybrid:
   alpha_cold: 0.2
